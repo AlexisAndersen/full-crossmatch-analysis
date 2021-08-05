@@ -1,0 +1,125 @@
+import pandas as pd
+import numpy as np
+from pandas import DataFrame as df
+import matplotlib.pyplot as plt
+import requests
+from PIL import Image
+import io
+import csv
+import os
+import psycopg2
+import sys
+
+def filename(x):
+    if x== "alexis":
+        return "alexisa"
+    if x== "ruby":
+        return "rubywong"   #check this
+    if x== "caitlin":
+        return "caitlink"   #check this
+    if x=="autumn":
+        return "autumnaw"
+    else:
+        sys.exit("This user is unknown.")
+        
+def plot_cutout(row_num):
+    desi_ra, desi_dec=df1.desi_ra[row_num], df1.desi_dec[row_num] 
+    trans_ra, trans_dec=df1.trans_ra[row_num], df1.trans_dec[row_num]
+    desi_id, trans_id=df1.desi_id[row_num], df1.trans_id[row_num]
+    spectype, z = df1.spectype[row_num], df1.z[row_num]
+    desi_ang_sep = df1.ang_sep[row_num]*3600      ##in arcseconds
+    ##defining variables 
+
+    
+    fname = "%s_%s.png"%(desi_id, trans_id)
+    cutoutpath= os.path.join(parentpath, fname)
+    ##unique filename
+    
+    url = "http://legacysurvey.org/viewer/cutout.jpg?ra=%s&dec=%s&layer=ls-dr9&pixscale=0.27&bands=grz"\
+    %(desi_ra,desi_dec)
+    plt.figure(figsize=(8,8), dpi=120)
+    r = requests.get(url)
+    plt.imshow(Image.open(io.BytesIO(r.content)))
+    
+    d_rapix = (((trans_ra-desi_ra)*np.cos(np.abs(trans_dec))*3600)/0.27)    
+    d_decpix = (((trans_dec-desi_dec)*3600)/0.27)
+    ##difference function, translated to pixels
+    
+    ang_sep=((d_rapix**2)+(d_decpix**2))**(0.5)*0.27
+    
+    ##TRANSIENT AND GALAXY
+    plt.scatter(128+d_rapix, 128+d_decpix, marker= 'o',c='lime',\
+    label=f'SNLS\nname: {trans_id}\nRA: {trans_ra :0.5f} deg\nDec: {trans_dec :0.5f} deg'.format())   
+    plt.hlines(128, 128+(desi_ang_sep/3/0.27), 128+(desi_ang_sep/3/0.27)+5, color = 'cyan')
+    plt.hlines(128, 128-(desi_ang_sep/3/0.27)-5, 128-(desi_ang_sep/3/0.27), color = 'cyan')
+    plt.vlines(128, 128+(desi_ang_sep/3/0.27), 128+(desi_ang_sep/3/0.27)+5, color = 'cyan')
+    plt.vlines(128, 128-(desi_ang_sep/3/0.27)-5, 128-(desi_ang_sep/3/0.27), color = 'cyan')
+    plt.scatter(np.NaN, np.NaN, marker = '+', s=100, color = 'cyan',\
+    label=f'Desi Galaxy\nTarget ID: {desi_id}\nRA: {desi_ra :0.5f} deg\nDec: {desi_dec :0.5f} deg'.format())
+    
+    #SCALE AND COMPASS
+    plt.errorbar(200, 225, xerr=10/0.27/2, color='w', capsize=5)
+    plt.text(200,230, '10 arcsec', c='w', horizontalalignment='center', verticalalignment='top', size='medium', fontweight='bold')
+    plt.arrow(25,230,0,-25, color='w', head_width=2.5)
+    plt.text(25,195,'N',c='w',horizontalalignment='center', verticalalignment='center', fontweight='bold')
+    plt.arrow(25,230,-25*np.cos(230),0, color='w', head_width=2.5)
+    plt.text(50,230,'E',c='w',horizontalalignment='left', verticalalignment='center', fontweight='bold')
+    bbox_props=dict(facecolor='w',alpha=0.5)
+    
+    plt.text(10,45,f'spectype = {spectype}\nz = {z :0.5f}\nq3c angular separation = {round(desi_ang_sep,1) :0.1f}'.format(),
+            bbox=bbox_props, fontsize=12)
+    legend_properties = {'weight':'bold'}
+    plt.legend(fontsize=12, bbox_to_anchor=(0,0), loc='upper left', frameon=False, ncol=2, columnspacing=0.1, prop=legend_properties)
+    plt.axis('off')    
+    plt.title("LegSurv DR9 Cutout\n centered on Desi Target (RA, DEC)", fontsize = 14)
+    plt.tight_layout()
+    plt.savefig(cutoutpath, bbox_inches="tight")
+    plt.close()
+    
+    
+# TO USE, MAKE SURE YOU HAVE xmatch_all.csv is downloaded in $HOME directory
+print("ENTER FIRST NAME FOR FILEPATH")
+user=str(input("FIRSTNAME:"))
+
+filepath='/global/homes/%s/%s/xmatch_all.csv'%(user[0],filename(user))
+path=os.path.exists(filepath)
+if path == False:
+    sys.exit("Path does not exist. Check that the csv is in the home directory.")
+
+print("ENTER SURVEY SOURCE")
+survey= str(input("SURVEY:"))
+if survey != "snls" or "ztf" or "decat": 
+    sys.exit("survey input does not match table.")
+    
+print("ENTER RANGE IN ARCSECONDS")
+low_a= float(input("LOWER LIMIT:"))
+high_a= float(input("HIGHER LIMIT:"))
+
+#create folder
+parentpath="/global/homes/%s/%s/%s_%s_to_%s"%(user[0],filename(user), survey,low_a, high_a)
+os.makedirs(parentpath, exist_ok=True)
+
+#create new csv
+csvpath= os.path.join(parentpath, '%s_%s_to_%s.csv'%(survey,low_a, high_a))
+df = pd.read_csv(filepath)
+df[(df['survey']==survey)&(df['ang_sep']>=low_a/3600)&(df['ang_sep']<=high_a/3600)].to_csv(csvpath, index=False)
+
+#histogram
+df1=pd.read_csv(csvpath)
+histpath=os.path.join(parentpath, "histogram.png")
+fig = plt.figure()
+plt.hist(df1['ang_sep']*3600)
+plt.title("%s match results in range (%s, %s) arcsecs"%(survey, low_a, high_a))
+plt.yscale('log')
+plt.xlabel('angular seperation in arcsecs')
+plt.ylabel('count')
+plt.savefig(histpath)
+plt.close(fig)  ##close fig so it is not shown, comment out if needed
+
+##CUTOUTS
+for i in range(0,len(df1['trans_id'])):
+    plot_cutout(i)
+
+
+    
+    
