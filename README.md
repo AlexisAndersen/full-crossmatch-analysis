@@ -6,3 +6,5 @@ When provided a survey name (snls, ztf ...) and arcsecond range, the function wi
 Requires that xmatch_all.csv is downloaded in the home directory. Check that SNLS is not capitalized in the csv (if it is, contact Alexis for an adjusted list).
 
 Reading in the csv files requires a unique filepath. Currently there is an input function that allows Ruby, Autumn, Caitlin, and Alexis to input their names so that the function does not have be adjust for each, but outside of that it will need to be updated. Possibly, home directory file path could be an input so that anyone can use it.
+
+crossmathc_class includes a simplfied analysis of a larger dataset using class functions.
